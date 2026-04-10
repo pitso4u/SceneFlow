@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SceneFlow — Video Scene Builder</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* From user's snippet styling */
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --color-background-primary: #ffffff;
+      --color-background-secondary: #f8fafc;
+      --color-background-tertiary: #f1f5f9;
+      --color-text-primary: #0f172a;
+      --color-text-secondary: #475569;
+      --color-border-secondary: #e2e8f0;
+      --color-border-tertiary: #f1f5f9;
+      
+      /* Base values for main app */
+      --bg:      #111827;
+      --surface: #1f2937;
+      --panel:   #161d2b;
+      --border:  rgba(255,255,255,0.1);
+      --text:    #e5e7eb;
+      --muted:   #9ca3af;
+      --accent:  #4fc3f7;
+      --accent2: #ce93d8;
+      --danger:  #ef5350;
+      --radius:  8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-size: 13px;
+      user-select: none;
+    }
+
+    /* ── Toolbar ──────────────────────────────────────────────── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      height: 44px;
+    }
+
+    #toolbar .logo {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.3px;
+      margin-right: 8px;
+    }
+
+    .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+
+    button {
+      padding: 5px 12px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    button:hover  { background: rgba(255,255,255,0.14); }
+    button:active { background: rgba(255,255,255,0.08); }
+    button.primary { background: var(--accent); color: #000; border-color: transparent; }
+    button.primary:hover { background: #80d8ff; }
+    button.danger  { background: rgba(239,83,80,0.15); color: var(--danger); border-color: rgba(239,83,80,0.3); }
+    button.danger:hover { background: rgba(239,83,80,0.28); }
+
+    #toolbar .spacer { flex: 1; }
+
+    /* ── Main layout ──────────────────────────────────────────── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Palette ──────────────────────────────────────────────── */
+    #palette {
+      width: 140px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding-bottom: 12px;
+    }
+
+    .palette-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      padding: 10px 10px 4px;
+    }
+
+    .palette-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      cursor: grab;
+      border-radius: 6px;
+      margin: 1px 6px;
+      color: var(--text);
+      transition: background 0.1s;
+      font-size: 12px;
+    }
+    .palette-item:hover { background: rgba(255,255,255,0.08); }
+    .palette-item:active { cursor: grabbing; }
+
+    .palette-icon {
+      width: 20px;
+      text-align: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .palette-item.disabled {
+      opacity: 0.4;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    /* ── Canvas wrapper ──────────────────────────────────────── */
+    #canvas-wrap {
+      flex: 1;
+      background: #0d1117;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #canvas-bg-label {
+      position: absolute;
+      bottom: 10px;
+      right: 14px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.15);
+      pointer-events: none;
+    }
+
+    #canvas {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* ── Scene elements ──────────────────────────────────────── */
+    .scene-el {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: move;
+      border: 1px solid transparent;
+      transition: border-color 0.1s;
+    }
+
+    .scene-el:hover { border-color: rgba(79,195,247,0.4); }
+
+    .scene-el.selected {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .scene-el .delete-btn {
+      position: absolute;
+      top: -9px;
+      right: -9px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--danger);
+      color: #fff;
+      font-size: 11px;
+      border: none;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .scene-el.selected .delete-btn { display: flex; }
+
+    /* Resize handle */
+    .scene-el .resize-handle {
+      position: absolute;
+      bottom: -5px;
+      right: -5px;
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      border-radius: 2px;
+      cursor: nwse-resize;
+      display: none;
+    }
+    .scene-el.selected .resize-handle { display: block; }
+
+    /* ── NEW PROPERTIES PANEL (MERGED FROM USER) ────────────── */
+    #props-panel {
+      width: 160px;
+      flex-shrink: 0;
+      border-left: 0.5px solid var(--border);
+      background: var(--color-background-secondary);
+      overflow-y: auto;
+      font-family: var(--font-sans);
+    }
+
+    #props-panel .panel-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+      padding: 8px 10px 4px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    #no-selection {
+      padding: 12px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+
+    #prop-fields { display: none; }
+
+    .prop-row {
+      padding: 4px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .prop-row label {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+    }
+
+    .prop-row input,
+    .prop-row select {
+      font-size: 12px;
+      padding: 3px 6px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: 4px;
+      background: var(--color-background-primary);
+      color: var(--color-text-primary);
+      width: 100%;
+      outline: none;
+    }
+
+    .prop-row input:focus,
+    .prop-row select:focus {
+      border-color: var(--accent);
+    }
+
+    .prop-row input[type="color"] {
+      padding: 0;
+      height: 28px;
+      cursor: pointer;
+    }
+
+    /* ── Timeline ────────────────────────────────────────────── */
+    #timeline-area {
+      flex-shrink: 0;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    #timeline-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      height: 36px;
+    }
+
+    #timeline-header .tl-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    #play-btn {
+      padding: 3px 10px;
+      font-size: 11px;
+    }
+
+    #time-display {
+      font-size: 11px;
+      color: var(--accent);
+      min-width: 36px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #total-dur-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    #timeline-tracks {
+      overflow-y: auto;
+      overflow-x: hidden;
+      flex: 1;
+      padding: 6px 0;
+      min-height: 60px;
+      max-height: 124px;
+    }
+
+    .tl-track {
+      display: flex;
+      align-items: center;
+      height: 26px;
+      padding: 0 10px;
+      gap: 8px;
+    }
+
+    .tl-track-label {
+      font-size: 11px;
+      width: 80px;
+      flex-shrink: 0;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .tl-track-label:hover { color: var(--text); }
+
+    .tl-bar-bg {
+      flex: 1;
+      height: 14px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 3px;
+      position: relative;
+      min-width: 100px;
+    }
+
+    .tl-bar {
+      position: absolute;
+      height: 100%;
+      border-radius: 3px;
+      opacity: 0.75;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .tl-bar:hover { opacity: 1; }
+
+    .tl-playhead {
+      position: absolute;
+      top: -3px;
+      width: 2px;
+      height: calc(100% + 6px);
+      background: var(--accent);
+      pointer-events: none;
+      border-radius: 1px;
+    }
+
+    /* ── Notifications ───────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(40px);
+      background: rgba(30,40,60,0.95);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 18px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Scrollbar styling ───────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.25s;
+    animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+  }
+  </style>
+</head>
+<body>
+
+<!-- ─────────────────── TOOLBAR ─────────────────── -->
+<div id="toolbar">
+  <span class="logo">⬡ SceneFlow</span>
+  <div class="sep"></div>
+  <button onclick="addElement('text')">＋ Text</button>
+  <button onclick="addElement('rect')">＋ Rectangle</button>
+  <button onclick="addElement('circle')">＋ Circle</button>
+  <button onclick="addMedia('image')">＋ Image</button>
+  <button onclick="addMedia('video')">＋ Video Clip</button>
+  <div class="sep"></div>
+  <button class="danger" onclick="clearCanvas()">Clear</button>
+  <div class="spacer"></div>
+  <button onclick="exportProject()">↓ Export JSON</button>
+  <button class="primary" onclick="showRenderInfo()">▶ Render Video</button>
+</div>
+
+<!-- ─────────────────── MAIN ─────────────────── -->
+<div id="main">
+
+  <!-- Palette -->
+  <div id="palette">
+    <div class="palette-section-title">Elements</div>
+
+    <div class="palette-item" draggable="true" ondragstart="onPaletteDragStart(event,'text')">
+      <span class="palette-icon" style="color:#e5e7eb;font-weight:600;font-size:14px">T</span>
+      Text
+    </div>
+    <div class="palette-item" draggable="true" ondragstart="onPaletteDragStart(event,'rect')">
+      <span class="palette-icon" style="color:#4fc3f7">▬</span>
+      Rectangle
+    </div>
+    <div class="palette-item" draggable="true" ondragstart="onPaletteDragStart(event,'circle')">
+      <span class="palette-icon" style="color:#ce93d8">●</span>
+      Circle
+    </div>
+    <div class="palette-item" draggable="true" ondragstart="onPaletteDragStart(event,'image')">
+      <span class="palette-icon">🖼</span>
+      Image
+    </div>
+    <div class="palette-item" draggable="true" ondragstart="onPaletteDragStart(event,'video')">
+      <span class="palette-icon" style="color:#a5d6a7">▶</span>
+      Video Clip
+    </div>
+
+    <div class="palette-section-title" style="margin-top:8px">Animations</div>
+    <div class="palette-item disabled"><span class="palette-icon">→</span> Slide In</div>
+    <div class="palette-item disabled"><span class="palette-icon">↑</span> Fade In</div>
+    <div class="palette-item disabled"><span class="palette-icon">⟳</span> Spin</div>
+    <div class="palette-item disabled"><span class="palette-icon">⤡</span> Zoom In</div>
+
+    <div class="palette-section-title" style="margin-top:8px">Transitions</div>
+    <div class="palette-item disabled"><span class="palette-icon">⬛</span> Cut</div>
+    <div class="palette-item disabled"><span class="palette-icon">◩</span> Wipe</div>
+    <div class="palette-item disabled"><span class="palette-icon">○</span> Dissolve</div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="canvas-wrap"
+       ondragover="event.preventDefault()"
+       ondrop="onCanvasDrop(event)">
+    <div id="canvas" onclick="onCanvasClick(event)"></div>
+    <span id="canvas-bg-label">1920 × 1080 preview</span>
+  </div>
+
+  <!-- Properties -->
+  <div id="props-panel">
+    <div class="panel-title">Properties</div>
+    <div id="no-selection">Click an element to view and edit its properties.</div>
+    <div id="prop-fields">
+      <div class="prop-row">
+        <label>Label</label>
+        <input id="p-label" type="text" oninput="setProp('label', this.value)" />
+      </div>
+      <div class="prop-row">
+        <label>X (px)</label>
+        <input id="p-x" type="number" oninput="setPropNum('x', this.value)" />
+      </div>
+      <div class="prop-row">
+        <label>Y (px)</label>
+        <input id="p-y" type="number" oninput="setPropNum('y', this.value)" />
+      </div>
+      <div class="prop-row">
+        <label>Width (px)</label>
+        <input id="p-w" type="number" oninput="setPropNum('w', this.value)" />
+      </div>
+      <div class="prop-row">
+        <label>Height (px)</label>
+        <input id="p-h" type="number" oninput="setPropNum('h', this.value)" />
+      </div>
+      <div class="prop-row">
+        <label>Color</label>
+        <input id="p-color" type="color" oninput="setProp('color', this.value)" />
+      </div>
+      <div class="prop-row">
+        <label>Opacity</label>
+        <input id="p-opacity" type="range" min="0" max="1" step="0.05"
+               oninput="setPropNum('opacity', this.value)" />
+      </div>
+      <div class="prop-row">
+        <label>Animation</label>
+        <select id="p-anim" onchange="setProp('anim', this.value)">
+          <option value="none">None</option>
+          <option value="fadeIn">Fade In</option>
+          <option value="slideLeft">Slide from Left</option>
+          <option value="slideUp">Slide from Bottom</option>
+          <option value="zoomIn">Zoom In</option>
+          <option value="spin">Spin</option>
+        </select>
+      </div>
+      <div class="prop-row">
+        <label>Start time (s)</label>
+        <input id="p-start" type="number" min="0" step="0.5"
+               oninput="setPropNum('start', this.value); renderTimeline()" />
+      </div>
+      <div class="prop-row">
+        <label>Duration (s)</label>
+        <input id="p-dur" type="number" min="0.5" step="0.5"
+               oninput="setPropNum('dur', this.value); renderTimeline()" />
+      </div>
+    </div>
+  </div>
+
+</div><!-- end #main -->
+
+<!-- ─────────────────── TIMELINE ─────────────────── -->
+<div id="timeline-area">
+  <div id="timeline-header">
+    <span class="tl-title">Timeline</span>
+    <button id="play-btn" onclick="togglePlayback()">▶ Play</button>
+    <span id="time-display">0.0s</span>
+    <span id="total-dur-label">Total: 5.0s</span>
+  </div>
+  <div id="timeline-tracks"></div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<!-- ─────────────────── SCRIPT ─────────────────── -->
+<script>
+  /* ════════════════════════════════════════════
+     State
+  ════════════════════════════════════════════ */
+  let elements    = [];   // Array of element objects
+  let selectedId  = null; // Currently selected element id
+  let idCounter   = 0;    // Auto-increment id
+  let paletteDragType = null; // Type being dragged from palette
+
+  /* Playback */
+  let playing     = false;
+  let playTime    = 0;
+  let playTimer   = null;
+  let totalDur    = 5;
+
+  /* Element type colours */
+  const TYPE_COLORS = {
+    text:   '#4fc3f7',
+    rect:   '#7986cb',
+    circle: '#ce93d8',
+    image:  '#4db6ac',
+    video:  '#a5d6a7',
+  };
+
+  /* Timeline bar colours (cycling) */
+  const TL_COLORS = ['#4fc3f7','#ce93d8','#a5d6a7','#ffcc80','#ef9a9a','#80deea','#ffb74d','#f48fb1'];
+
+  /* ════════════════════════════════════════════
+     Helpers
+  ════════════════════════════════════════════ */
+  function uid() { return 'el' + (++idCounter); }
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  /* ════════════════════════════════════════════
+     Add element
+  ════════════════════════════════════════════ */
+  function addMedia(type) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = type === 'image' ? 'image/*' : 'video/*';
+    input.onchange = e => {
+      if (!e.target.files || e.target.files.length === 0) return;
+      const file = e.target.files[0];
+      const url = URL.createObjectURL(file);
+      const el = addElement(type);
+      el.src = url;
+      mountElement(el);
+    };
+    input.click();
+  }
+
+  function addElement(type, dropX, dropY) {
+    const id    = uid();
+    const color = TYPE_COLORS[type] || '#888';
+
+    const x = dropX !== undefined ? dropX : 100 + Math.random() * 220;
+    const y = dropY !== undefined ? dropY : 60  + Math.random() * 120;
+    const opacity = 1;
+
+    const el = {
+      id,
+      type,
+      label:   type === 'text' ? 'Hello World' : type,
+      x,
+      y,
+      w:       type === 'circle' ? 90  : type === 'text' ? 130 : 140,
+      h:       type === 'circle' ? 90  : type === 'text' ? 44  : 80,
+      color,
+      opacity,
+      anim:    'fadeIn',
+      start:   0,
+      dur:     3,
+      keyframes: [
+        { t: 0, x, y, opacity: 0 },
+        { t: 1, x, y, opacity }
+      ]
+    };
+
+    elements.push(el);
+    mountElement(el);
+    selectElement(id);
+    renderTimeline();
+    return el;
+  }
+
+  /* ════════════════════════════════════════════
+     Mount / re-render a DOM element
+  ════════════════════════════════════════════ */
+  function mountElement(el) {
+    let dom = document.getElementById(el.id);
+    const isNew = !dom;
+
+    if (isNew) {
+      dom = document.createElement('div');
+      dom.id = el.id;
+      dom.className = 'scene-el';
+
+      /* Delete button */
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '×';
+      delBtn.title = 'Delete';
+      delBtn.addEventListener('click', e => { e.stopPropagation(); deleteElement(el.id); });
+      dom.appendChild(delBtn);
+
+      /* Resize handle */
+      const rz = document.createElement('div');
+      rz.className = 'resize-handle';
+      rz.addEventListener('mousedown', e => startResize(e, el.id));
+      dom.appendChild(rz);
+
+      dom.addEventListener('mousedown', e => startDrag(e, el.id));
+      dom.addEventListener('click',     e => { e.stopPropagation(); selectElement(el.id); });
+
+      document.getElementById('canvas').appendChild(dom);
+    }
+
+    /* Position / size */
+    dom.style.left    = el.x + 'px';
+    dom.style.top     = el.y + 'px';
+    dom.style.width   = el.w + 'px';
+    dom.style.height  = el.h + 'px';
+    dom.style.opacity = el.opacity;
+
+    /* Visual style per type */
+    switch (el.type) {
+      case 'text':
+        dom.style.cssText += `
+          color: ${el.color};
+          font-size: 18px;
+          font-weight: 600;
+          background: transparent;
+          border: 1px dashed rgba(255,255,255,0.2);
+          border-radius: 4px;
+        `;
+        // preserve buttons then set inner text
+        const span = dom.querySelector('span') || document.createElement('span');
+        span.style.pointerEvents = 'none';
+        span.textContent = el.label;
+        if (!dom.querySelector('span')) dom.insertBefore(span, dom.firstChild);
+        break;
+
+      case 'circle':
+        dom.style.cssText += `
+          background: ${el.color};
+          border-radius: 50%;
+          opacity: ${el.opacity * 0.85};
+        `;
+        break;
+
+      case 'image':
+        dom.style.cssText += `
+          background: rgba(255,255,255,0.07);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 6px;
+          color: rgba(255,255,255,0.5);
+          font-size: 11px;
+          flex-direction: column;
+          gap: 4px;
+          overflow: hidden;
+        `;
+        setInnerContent(dom, `<img src="${el.src || ''}" style="width:100%;height:100%;object-fit:cover;pointer-events:none;">`);
+        break;
+
+      case 'video':
+        dom.style.cssText += `
+          background: rgba(0,0,0,0.55);
+          border: 2px solid rgba(165,214,167,0.4);
+          border-radius: 6px;
+          color: rgba(165,214,167,0.8);
+          flex-direction: column;
+          gap: 4px;
+          font-size: 11px;
+          overflow: hidden;
+        `;
+        setInnerContent(dom, `<video src="${el.src || ''}" style="width:100%;height:100%;object-fit:cover;pointer-events:none;" muted></video>`);
+        break;
+
+      default: /* rect */
+        dom.style.cssText += `
+          background: ${el.color};
+          border-radius: 6px;
+          opacity: ${el.opacity * 0.85};
+        `;
+        break;
+    }
+
+    return dom;
+  }
+
+  /* helper – set innerHTML without nuking the control buttons */
+  function setInnerContent(dom, html) {
+    const delBtn = dom.querySelector('.delete-btn');
+    const rzHnd  = dom.querySelector('.resize-handle');
+    dom.innerHTML = html;
+    if (delBtn) dom.appendChild(delBtn);
+    if (rzHnd)  dom.appendChild(rzHnd);
+  }
+
+  /* ════════════════════════════════════════════
+     Drag to move
+  ════════════════════════════════════════════ */
+  function startDrag(e, id) {
+    if (e.target.classList.contains('delete-btn'))    return;
+    if (e.target.classList.contains('resize-handle')) return;
+    e.stopPropagation();
+
+    const el   = elements.find(x => x.id === id);
+    if (!el) return;
+    selectElement(id);
+
+    const startX = e.clientX - el.x;
+    const startY = e.clientY - el.y;
+
+    function onMove(ev) {
+      el.x = ev.clientX - startX;
+      el.y = ev.clientY - startY;
+      const dom = document.getElementById(id);
+      if (dom) { dom.style.left = el.x + 'px'; dom.style.top = el.y + 'px'; }
+      updatePropPanel();
+    }
+
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  /* ════════════════════════════════════════════
+     Resize
+  ════════════════════════════════════════════ */
+  function startResize(e, id) {
+    e.stopPropagation();
+    const el   = elements.find(x => x.id === id);
+    if (!el) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origW  = el.w;
+    const origH  = el.h;
+
+    function onMove(ev) {
+      el.w = Math.max(40, origW + (ev.clientX - startX));
+      el.h = Math.max(24, origH + (ev.clientY - startY));
+      const dom = document.getElementById(id);
+      if (dom) { dom.style.width = el.w + 'px'; dom.style.height = el.h + 'px'; }
+      updatePropPanel();
+    }
+
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  /* ════════════════════════════════════════════
+     Selection
+  ════════════════════════════════════════════ */
+  function selectElement(id) {
+    selectedId = id;
+    document.querySelectorAll('.scene-el').forEach(d => d.classList.remove('selected'));
+    const dom = document.getElementById(id);
+    if (dom) dom.classList.add('selected');
+    updatePropPanel();
+  }
+
+  function deselectAll() {
+    selectedId = null;
+    document.querySelectorAll('.scene-el').forEach(d => d.classList.remove('selected'));
+    document.getElementById('no-selection').style.display = '';
+    document.getElementById('prop-fields').style.display  = 'none';
+  }
+
+  function onCanvasClick(e) {
+    if (e.target.id === 'canvas' || e.target.id === 'canvas-wrap') deselectAll();
+  }
+
+  /* ════════════════════════════════════════════
+     Properties panel
+  ════════════════════════════════════════════ */
+  function updatePropPanel() {
+    const el = elements.find(x => x.id === selectedId);
+    if (!el) {
+      document.getElementById('no-selection').style.display = '';
+      document.getElementById('prop-fields').style.display  = 'none';
+      return;
+    }
+    document.getElementById('no-selection').style.display = 'none';
+    document.getElementById('prop-fields').style.display  = '';
+
+    document.getElementById('p-label').value   = el.label;
+    document.getElementById('p-x').value       = Math.round(el.x);
+    document.getElementById('p-y').value       = Math.round(el.y);
+    document.getElementById('p-w').value       = Math.round(el.w);
+    document.getElementById('p-h').value       = Math.round(el.h);
+    document.getElementById('p-color').value   = el.color;
+    document.getElementById('p-opacity').value = el.opacity;
+    document.getElementById('p-anim').value    = el.anim;
+    document.getElementById('p-start').value   = el.start;
+    document.getElementById('p-dur').value     = el.dur;
+  }
+
+  function setProp(key, val) {
+    const el = elements.find(x => x.id === selectedId);
+    if (!el) return;
+    el[key] = val;
+    mountElement(el);
+  }
+
+  function setPropNum(key, val) {
+    const el = elements.find(x => x.id === selectedId);
+    if (!el) return;
+    el[key] = parseFloat(val) || 0;
+    mountElement(el);
+  }
+
+  /* ════════════════════════════════════════════
+     Delete / clear
+  ════════════════════════════════════════════ */
+  function deleteElement(id) {
+    elements = elements.filter(x => x.id !== id);
+    const dom = document.getElementById(id);
+    if (dom) dom.remove();
+    if (selectedId === id) deselectAll();
+    renderTimeline();
+    toast('Element deleted');
+  }
+
+  function clearCanvas() {
+    if (elements.length === 0) return;
+    if (!confirm('Clear all elements?')) return;
+    elements.forEach(el => { const d = document.getElementById(el.id); if (d) d.remove(); });
+    elements = [];
+    deselectAll();
+    renderTimeline();
+    toast('Canvas cleared');
+  }
+
+  /* ════════════════════════════════════════════
+     Drag from palette
+  ════════════════════════════════════════════ */
+  function onPaletteDragStart(e, type) {
+    paletteDragType = type;
+  }
+
+  function onCanvasDrop(e) {
+    if (!paletteDragType) return;
+    const rect = document.getElementById('canvas-wrap').getBoundingClientRect();
+    addElement(paletteDragType, e.clientX - rect.left - 55, e.clientY - rect.top - 35);
+    paletteDragType = null;
+    toast('Element added — drag to reposition');
+  }
+
+  /* ════════════════════════════════════════════
+     Timeline
+  ════════════════════════════════════════════ */
+  function renderTimeline() {
+    totalDur = Math.max(5, ...elements.map(el => el.start + el.dur));
+    document.getElementById('total-dur-label').textContent = 'Total: ' + totalDur.toFixed(1) + 's';
+
+    const container = document.getElementById('timeline-tracks');
+    container.innerHTML = '';
+
+    elements.forEach((el, i) => {
+      const pctLeft  = (el.start / totalDur * 100).toFixed(2) + '%';
+      const pctWidth = (el.dur   / totalDur * 100).toFixed(2) + '%';
+      const color    = TL_COLORS[i % TL_COLORS.length];
+
+      const track = document.createElement('div');
+      track.className = 'tl-track';
+
+      const lbl = document.createElement('div');
+      lbl.className = 'tl-track-label';
+      lbl.textContent = el.label || el.type;
+      lbl.title = el.label;
+      lbl.onclick = () => selectElement(el.id);
+
+      const bgBar = document.createElement('div');
+      bgBar.className = 'tl-bar-bg';
+      bgBar.onclick = (e) => {
+        const rect = bgBar.getBoundingClientRect();
+        const pct = (e.clientX - rect.left) / rect.width;
+        playTime = pct * totalDur;
+        updatePlaybackFrame();
+      };
+
+      const bar = document.createElement('div');
+      bar.className = 'tl-bar';
+      bar.style.left       = pctLeft;
+      bar.style.width      = pctWidth;
+      bar.style.background = color;
+      bar.title = `${el.label} — ${el.start}s to ${(el.start + el.dur).toFixed(1)}s  •  ${el.anim}`;
+      bar.onclick = () => selectElement(el.id);
+
+      const playhead = document.createElement('div');
+      playhead.className = 'tl-playhead';
+      playhead.id = 'ph-' + el.id;
+      playhead.style.left = (playTime / totalDur * 100).toFixed(2) + '%';
+
+      bgBar.appendChild(bar);
+      bgBar.appendChild(playhead);
+      track.appendChild(lbl);
+      track.appendChild(bgBar);
+      container.appendChild(track);
+    });
+  }
+
+  /* ════════════════════════════════════════════
+     Playback
+  ════════════════════════════════════════════ */
+  function togglePlayback() {
+    playing = !playing;
+    const btn = document.getElementById('play-btn');
+
+    if (playing) {
+      btn.textContent = '⏹ Stop';
+      playTime = 0;
+      playTimer = setInterval(tick, 50);
+    } else {
+      btn.textContent = '▶ Play';
+      clearInterval(playTimer);
+      /* restore all elements */
+      elements.forEach(el => {
+        const dom = document.getElementById(el.id);
+        if (dom) { dom.style.opacity = el.opacity; dom.style.transform = ''; }
+      });
+    }
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function applyKeyframes(el, localTime) {
+    if (!el.keyframes || el.keyframes.length < 2) return;
+
+    const kf = el.keyframes;
+    let a = kf[0], b = kf[kf.length - 1];
+
+    for (let i = 0; i < kf.length - 1; i++) {
+        if (localTime >= kf[i].t && localTime <= kf[i+1].t) {
+        a = kf[i];
+        b = kf[i+1];
+        break;
+        }
+    }
+
+    const duration = (b.t - a.t) || 0.0001;
+    const t = clamp((localTime - a.t) / duration, 0, 1);
+
+    el.x = lerp(a.x, b.x, t);
+    el.y = lerp(a.y, b.y, t);
+    el.opacity = lerp(a.opacity, b.opacity, t);
+  }
+
+  function tick() {
+    playTime += 0.05;
+    if (playTime > totalDur) { playTime = 0; }
+    updatePlaybackFrame();
+  }
+
+  function updatePlaybackFrame() {
+    document.getElementById('time-display').textContent = playTime.toFixed(1) + 's';
+
+    /* Move playheads */
+    const pct = (playTime / totalDur * 100).toFixed(2) + '%';
+    document.querySelectorAll('.tl-playhead').forEach(ph => ph.style.left = pct);
+
+    /* Show / hide elements based on their time window */
+    elements.forEach(el => {
+      const dom = document.getElementById(el.id);
+      if (!dom) return;
+
+      const active = playTime >= el.start && playTime <= (el.start + el.dur);
+      if (!active) {
+        dom.style.opacity   = '0';
+        dom.style.transform = '';
+        return;
+      }
+
+      /* Local time within the element's lifespan */
+      const local = playTime - el.start;
+
+      const vid = dom.querySelector('video');
+      if (vid) {
+        vid.currentTime = local;
+        if (playing) vid.play();
+        else vid.pause();
+      }
+
+      applyKeyframes(el, local);
+      mountElement(el);
+    });
+  }
+
+  /* ════════════════════════════════════════════
+     Export
+  ════════════════════════════════════════════ */
+  function exportProject() {
+    const project = {
+      version:       '1.0',
+      exportedAt:    new Date().toISOString(),
+      totalDuration: totalDur,
+      fps:           60,
+      resolution:    { w: 1920, h: 1080 },
+      elements:      elements.map(el => ({ ...el })),
+    };
+
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'sceneflow-project.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Project exported as sceneflow-project.json');
+  }
+
+  function showRenderInfo() {
+    alert(
+      'Video Render Pipeline\n\n' +
+      '1. Export your project JSON\n' +
+      '2. On a Node.js server, use Puppeteer to open this HTML and snapshot each frame\n' +
+      '3. Pipe frames into FFmpeg:\n\n' +
+      '   ffmpeg -framerate 60 -i frame_%04d.png \\\n' +
+      '          -c:v libx264 -pix_fmt yuv420p output.mp4\n\n' +
+      'Full render server code coming soon!'
+    );
+  }
+
+  /* ════════════════════════════════════════════
+     Keyboard shortcuts
+  ════════════════════════════════════════════ */
+  document.addEventListener('keydown', e => {
+    /* Delete / Backspace → remove selected */
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+      /* Don't fire when typing in an input */
+      if (document.activeElement.tagName === 'INPUT' ||
+          document.activeElement.tagName === 'TEXTAREA' ||
+          document.activeElement.tagName === 'SELECT') return;
+      deleteElement(selectedId);
+    }
+
+    /* Space → toggle play */
+    if (e.key === ' ' && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      togglePlayback();
+    }
+
+    /* Escape → deselect */
+    if (e.key === 'Escape') deselectAll();
+  });
+
+  /* Arrow keys to nudge selected element */
+  document.addEventListener('keydown', e => {
+    if (!selectedId) return;
+    if (document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'SELECT') return;
+
+    const el = elements.find(x => x.id === selectedId);
+    if (!el) return;
+    const step = e.shiftKey ? 10 : 1;
+
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); el.x -= step; }
+    if (e.key === 'ArrowRight') { e.preventDefault(); el.x += step; }
+    if (e.key === 'ArrowUp')    { e.preventDefault(); el.y -= step; }
+    if (e.key === 'ArrowDown')  { e.preventDefault(); el.y += step; }
+
+    mountElement(el);
+    updatePropPanel();
+  });
+
+  /* ════════════════════════════════════════════
+     Initial demo elements
+  ════════════════════════════════════════════ */
+  (function seedDemo() {
+    addElement('text',   70,  50);
+    addElement('rect',  220, 140);
+    addElement('circle',410, 100);
+    renderTimeline();
+    deselectAll();
+    toast('Welcome to SceneFlow — drag elements from the palette or click + buttons above');
+  })();
+</script>
+
+</body>
+</html>
